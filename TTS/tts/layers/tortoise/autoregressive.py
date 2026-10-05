@@ -16,10 +16,9 @@ except ImportError:
         from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
     except ImportError:
         import packaging.version
+
         def is_torch_greater_or_equal_than_2_4():
-            return packaging.version.parse(
-                torch.__version__.split('+')[0]
-            ) >= packaging.version.parse("2.4.0")
+            return packaging.version.parse(torch.__version__.split("+")[0]) >= packaging.version.parse("2.4.0")
 
     def isin(elements: torch.Tensor, test_elements: torch.Tensor | int) -> torch.Tensor:
         """Same as torch.isin without flags, but MPS-friendly.
@@ -34,17 +33,12 @@ except ImportError:
             test_elements = torch.tensor(test_elements)
             if test_elements.ndim == 0:
                 test_elements = test_elements.unsqueeze(0)
-            return (
-                elements.tile(test_elements.shape[0], 1)
-                .eq(test_elements.unsqueeze(1))
-                .sum(dim=0)
-                .bool()
-                .squeeze()
-            )
+            return elements.tile(test_elements.shape[0], 1).eq(test_elements.unsqueeze(1)).sum(dim=0).bool().squeeze()
         else:
             # Note: don't use named arguments in torch.isin,
             # see https://github.com/pytorch/pytorch/issues/126045
             return torch.isin(elements, test_elements)
+
 
 from TTS.tts.layers.tortoise.arch_utils import AttentionBlock, TypicalLogitsWarper
 
@@ -124,9 +118,10 @@ class GPT2InferenceModel(GPT2PreTrainedModel, GenerationMixin):
             emb = torch.cat([mel_emb, text_emb], dim=1)
         else:
             emb = self.embeddings(input_ids)
-            emb = emb + self.text_pos_embedding.get_fixed_embedding(
-                attention_mask.shape[1] - (mel_len + 1), attention_mask.device
-            )
+            # transformers >= 5.18 drops an all-ones attention_mask in generate(),
+            # so fall back to the cache length to locate the current position.
+            seq_len = attention_mask.shape[1] if attention_mask is not None else past_key_values.get_seq_length() + 1
+            emb = emb + self.text_pos_embedding.get_fixed_embedding(seq_len - (mel_len + 1), input_ids.device)
 
         transformer_outputs = self.transformer(
             inputs_embeds=emb,
